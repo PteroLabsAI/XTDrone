@@ -1,0 +1,2 @@
+# Shell scripts run under Linux (WSL included), where a CR breaks every line.
+*.sh text eol=lf
