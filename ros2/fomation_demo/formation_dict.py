@@ -1,3 +1,5 @@
+import sys
+
 import numpy as np
 
 formation_dict_6 = {"origin":np.array([[3,0,0],[0,3,0],[3,3,0],[0,6,0],[3,6,0]]),"T":np.array([[4,0,0],[2,0,0],[2,0,-2],[2,0,-4],[2,0,-6]]) , "diamond": np.array([[2,2,-2],[2,-2,-2],[-2,-2,-2],[-2,2,-2],[0,0,-4]]), "triangle": np.array([[-3,0,-3],[3,0,-3],[-1.5,0,-1.5],[1.5,0,-1.5],[0,0,-3]])}
@@ -20,3 +22,11 @@ formation_dict_18["origin"] = np.transpose(formation_dict_18["origin"])
 formation_dict_18["cuboid"] = np.transpose(formation_dict_18["cuboid"])
 formation_dict_18["sphere"] = np.transpose(formation_dict_18["sphere"])
 formation_dict_18["diamond"] = np.transpose(formation_dict_18["diamond"])
+
+FORMATIONS = {6: formation_dict_6, 9: formation_dict_9, 18: formation_dict_18}
+
+
+def formations_for(uav_num):
+    if uav_num not in FORMATIONS:
+        sys.exit("Only 6, 9 and 18 UAVs are supported.")
+    return FORMATIONS[uav_num]
