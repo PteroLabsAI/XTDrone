@@ -12,15 +12,18 @@ from px4_msgs.msg import VehicleGlobalPosition, VehicleLocalPosition
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 
-from avoid import avoid_pushes
+from avoid import avoid_pushes, avoid_radius
+from formation_dict import formations_for
 from geo import enu_between
 from px4 import QOS, px4_topic
 
 KP = 1.0  # the ROS 1 follower's Kp
-KP_AVOID = 2.0  # the ROS 1 follower's Kp_avoid
-# m/s, XTDrone's vel_max, now on the move relative to the leader only: slot changes keep its pace. Measured in
-# PteroSim: closest approach 1.2 m at 1 m/s, 0.64 m when the whole command was allowed 5 m/s.
-CORRECTION_MAX = 1.0
+# Twice the ROS 1 follower's Kp_avoid: at 2.0, two pairs crossing while 18 x500 built the cuboid at 7 m/s came 0.33 m
+# apart (x500 propellers touch at ~0.82 m); at 4.0 the closest pair was 0.82 m (PteroSim, 2026-10-03/04).
+KP_AVOID = 4.0
+# m/s, the slot pull's cap, on the move relative to the leader only. XTDrone's vel_max of 1 m/s took 8-15 s per figure
+# change; 2 m/s takes 4-8 s. The cap holds the slot pull alone, so the avoid push still wins near another vehicle.
+CORRECTION_MAX = 2.0
 # The communication node streams setpoints at 30 Hz; PX4 sends positions at 50 Hz (dds_topics.yaml rate_limit).
 CONTROL_HZ = 30.0
 
@@ -29,6 +32,7 @@ class Followers(Node):
     def __init__(self, uav_type, uav_num):
         super().__init__("followers")
         self.uav_num = uav_num
+        self.avoid_radius = avoid_radius(formations_for(uav_num).values())
         self.fix = [None] * uav_num
         self.leader_vel = None
         self.formation_pattern = None
@@ -59,14 +63,16 @@ class Followers(Node):
         if self.formation_pattern is None or self.leader_vel is None or any(f is None for f in self.fix):
             return
         # Avoid runs here, in the followers' tick, on the same fixes; it was a node that published every push.
-        push = avoid_pushes([numpy.array(enu_between(self.fix[0], f)) for f in self.fix])
+        push = avoid_pushes([numpy.array(enu_between(self.fix[0], f)) for f in self.fix], self.avoid_radius)
         v = self.leader_vel
         for i, pub in enumerate(self.vel_enu_pubs, start=1):
             to_slot = numpy.array(enu_between(self.fix[i], self.fix[0])) + self.formation_pattern[:, i - 1]
-            correction = KP * to_slot + KP_AVOID * push[i]
+            correction = KP * to_slot
             speed = numpy.linalg.norm(correction)
             if speed > CORRECTION_MAX:
                 correction *= CORRECTION_MAX / speed
+            # After the cap: capped together, a far slot's pull drowned the push (crossing pairs 0.44 m apart).
+            correction = correction + KP_AVOID * push[i]
             # The leader's velocity goes in whole; the position term alone trails a moving slot by speed / Kp.
             self.cmd_vel_enu.linear.x = v[0] + float(correction[0])
             self.cmd_vel_enu.linear.y = v[1] + float(correction[1])
