@@ -1,0 +1,9 @@
+# What the packages under ros2/ need that rosdep cannot install from their package.xml.
+# PCL, Eigen3, OpenCV, Boost and Armadillo are named by their CMake names there, which are no rosdep keys.
+libpcl-dev
+libeigen3-dev
+libopencv-dev
+libboost-dev
+libarmadillo-dev
+# ego-planner-swarm's README asks for Cyclone DDS.
+ros-humble-rmw-cyclonedds-cpp
