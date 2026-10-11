@@ -6,3 +6,7 @@
 	path = sensing/object_detection_and_tracking/darknet_ros
 	url = https://gitee.com/robin_shaun/darknet_ros_yolov4
 	branch = master
+[submodule "ros2/ego-planner-swarm"]
+	path = ros2/ego-planner-swarm
+	url = https://github.com/ZJU-FAST-Lab/ego-planner-swarm.git
+	branch = ros2_version
