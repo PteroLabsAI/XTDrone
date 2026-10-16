@@ -3,3 +3,5 @@
 # The image's build reads these under Linux too: a CR would end up in every package name.
 Dockerfile text eol=lf
 apt.txt text eol=lf
+# A patch holds upstream's CRLF lines byte for byte: no conversion either way, or it no longer applies.
+*.patch -text

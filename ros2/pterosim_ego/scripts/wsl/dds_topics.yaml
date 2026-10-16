@@ -1,0 +1,27 @@
+#####
+#
+# PX4's uXRCE-DDS topics for pterosim_ego's px4_bridge, which reads only odometry and command acks and writes offboard
+# setpoints and commands; every other default topic cost the agents and DDS discovery for nothing (px4_build.sh).
+#
+#####
+publications:
+
+  - topic: /fmu/out/vehicle_command_ack
+    type: px4_msgs::msg::VehicleCommandAck
+
+  # Chosen: ego-planner and the offboard setpoints need tens of hertz; PX4 default is 100.
+  - topic: /fmu/out/vehicle_odometry
+    type: px4_msgs::msg::VehicleOdometry
+    rate_limit: 50.
+
+subscriptions:
+  - topic: /fmu/in/offboard_control_mode
+    type: px4_msgs::msg::OffboardControlMode
+
+  - topic: /fmu/in/trajectory_setpoint
+    type: px4_msgs::msg::TrajectorySetpoint
+
+  - topic: /fmu/in/vehicle_command
+    type: px4_msgs::msg::VehicleCommand
+
+subscriptions_multi:
