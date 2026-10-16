@@ -13,7 +13,7 @@
   <participant profile_name="wsl_mirrored" is_default_profile="true">
     <rtps>
       <userTransports>
-        <!-- No shared memory: with it 4 of 18 nodes hung at a mass start; every 18-vehicle run since was UDP only. -->
+        <!-- No shared memory: nodes started all at once can hang on it under WSL; UDP only. -->
         <transport_id>udp_unfragmented</transport_id>
       </userTransports>
       <useBuiltinTransports>false</useBuiltinTransports>

@@ -3,7 +3,7 @@ own ROS 2 interface (px4_msgs over the uXRCE-DDS agent).
 
     python3 multirotor_communication.py <vehicle_type> <vehicle_id> [<vehicle_id> ...]
 
-Every vehicle named is served by one node in one process; a process per vehicle cost the 18-vehicle fleet two cores.
+Every vehicle named is served by one node in one process, so a large fleet does not pay a Python process per vehicle.
 """
 import math
 import os
@@ -34,7 +34,7 @@ CUSTOM_MODE_ENABLED = 1.0
 MODES = {"OFFBOARD": (6, 0), "AUTO.TAKEOFF": (4, 2), "AUTO.RTL": (4, 5), "AUTO.LAND": (4, 6)}
 # DDS from PX4 is best effort: a command is sent again until PX4 acknowledges it, as MAVLink's command protocol does.
 COMMAND_RETRY_S = 0.5  # chosen: tens of PX4 cycles, well under a person's patience at the keyboard
-COMMAND_ATTEMPTS = 5  # chosen; measured at 18 vehicles: 1 of 54 commands lost, 3 of 54 needing a second attempt
+COMMAND_ATTEMPTS = 5  # chosen: a few resends cover what the best-effort link drops
 COMMANDER_COMPONENT = 1  # MAV_COMP_ID_AUTOPILOT1, commander's component id
 # A source below COMPONENT_MODE_EXECUTOR_START makes a mode change the user's (commander/Commander.cpp)
 SOURCE_SYSTEM = SOURCE_COMPONENT = 1

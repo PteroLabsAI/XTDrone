@@ -1,6 +1,6 @@
 #!/bin/bash
 # The flight for the camera against a running PteroSim with the fleet spawned (spawn_pterosim.py): run_pterosim.sh in
-# tmux, fly_show.py in the foreground, teardown. PteroSim's scripts/filmmaking/record_swarm.py runs this through wsl.
+# tmux, fly_show.py in the foreground, teardown.
 #
 #   ./run_show.sh <ros2 tree> <uav_num> <px4_root> <px4_ros_ws>
 #   ./run_show.sh ~/formation_run/ros2 18 ~/Documents/PX4-Autopilot ~/px4_ros_ws

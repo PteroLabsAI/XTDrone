@@ -46,7 +46,7 @@ for ((i = 0; i < N; i++)); do
         PX4_UXRCE_DDS_NS=${TYPE}_$i PX4_UXRCE_DDS_PORT=$XRCE_AGENT_PORT PX4_PARAM_UXRCE_DDS_SYNCT=0 \
         "$PX4_BUILD/bin/px4" -i $i -d "$ETC" </dev/null >"$LOG/px4_$i.log" 2>&1) &
 done
-# Measured on MAVROS-fed bridges: 18 vehicles in one process filled its core (1.02, the GIL); three of six cost 0.74.
+# Python's GIL holds one bridge process to one core, so a large fleet is split across several.
 VEHICLES_PER_BRIDGE=6
 for ((first = 0; first < N; first += VEHICLES_PER_BRIDGE)); do
     last=$((first + VEHICLES_PER_BRIDGE < N ? first + VEHICLES_PER_BRIDGE - 1 : N - 1))
