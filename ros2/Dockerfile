@@ -14,12 +14,15 @@ RUN apt-get update \
 
 WORKDIR /ws
 COPY . src/
-# Every other dependency comes from the packages' own package.xml. Skipped: the CMake names apt.txt covers, and
-# dynamic_reconfigure and tf, ROS 1 packages that local_sensing and odom_visualization still list.
+# EGO-Planner on its node's clock (pterosim_ego README); whitespace-blind, as a Windows checkout turns its LF files CRLF.
+RUN git -C src apply --ignore-whitespace --directory=ego-planner-swarm pterosim_ego/patches/ego-planner-swarm-sim-clock.patch
+# Every other dependency comes from the packages' own package.xml. Skipped: the CMake names apt.txt covers,
+# dynamic_reconfigure and tf, ROS 1 packages that local_sensing and odom_visualization still list, and px4_msgs, which
+# pterosim_ego needs built from the PX4 tree that flies.
 RUN apt-get update \
  && rosdep update --rosdistro humble \
  && rosdep install --from-paths src --ignore-src -y --rosdistro humble \
-      --skip-keys "PCL Eigen3 OpenCV Boost Armadillo dynamic_reconfigure tf" \
+      --skip-keys "PCL Eigen3 OpenCV Boost Armadillo dynamic_reconfigure tf px4_msgs" \
  && rm -rf /var/lib/apt/lists/*
 RUN source /opt/ros/humble/setup.bash \
  && colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release

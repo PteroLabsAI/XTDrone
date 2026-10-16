@@ -1,0 +1,282 @@
+diff --git a/src/planner/bspline_opt/include/bspline_opt/ego_clock.h b/src/planner/bspline_opt/include/bspline_opt/ego_clock.h
+new file mode 100644
+index 0000000..3fb841d
+--- /dev/null
++++ b/src/planner/bspline_opt/include/bspline_opt/ego_clock.h
+@@ -0,0 +1,9 @@
++#pragma once
++#include <rclcpp/rclcpp.hpp>
++
++// The clock every plan time is read on; main() sets it to its node's, so use_sim_time puts the plans on the simulation's time.
++inline rclcpp::Clock::SharedPtr &ego_clock()
++{
++  static rclcpp::Clock::SharedPtr clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
++  return clock;
++}
+diff --git a/src/planner/bspline_opt/src/bspline_optimizer.cpp b/src/planner/bspline_opt/src/bspline_optimizer.cpp
+index 728d3c0..7c5f2b8 100755
+--- a/src/planner/bspline_opt/src/bspline_optimizer.cpp
++++ b/src/planner/bspline_opt/src/bspline_optimizer.cpp
+@@ -1,3 +1,4 @@
++#include <bspline_opt/ego_clock.h>
+ #include "bspline_opt/bspline_optimizer.h"
+ #include "bspline_opt/gradient_descent_optimizer.h"
+ // using namespace std;
+@@ -876,7 +877,7 @@ namespace ego_planner
+     cost = 0.0;
+     int end_idx = q.cols() - order_ - (double)(q.cols() - 2 * order_) * 1.0 / 3.0; // Only check the first 2/3 points
+     const double CLEARANCE = swarm_clearance_ * 2;
+-    double t_now = rclcpp::Clock().now().seconds();
++    double t_now = ego_clock()->now().seconds();
+     constexpr double a = 2.0, b = 1.0, inv_a2 = 1 / a / a, inv_b2 = 1 / b / b;
+ 
+     for (int i = order_; i < end_idx; i++)
+@@ -929,7 +930,7 @@ namespace ego_planner
+     cost = 0.0;
+     int end_idx = q.cols() - order_;
+     constexpr double CLEARANCE = 1.5;
+-    double t_now = rclcpp::Clock().now().seconds();
++    double t_now = ego_clock()->now().seconds();
+ 
+     for (int i = order_; i < end_idx; i++)
+     {
+@@ -1547,7 +1548,7 @@ namespace ego_planner
+     // 变量个数
+     variable_num_ = 3 * (end_id - start_id);
+ 
+-    rclcpp::Time t0 = rclcpp::Clock().now(), t1, t2;
++    rclcpp::Time t0 = ego_clock()->now(), t1, t2;
+     int restart_nums = 0, rebound_times = 0;
+     ;
+     bool flag_force_return, flag_occ, success;
+@@ -1575,10 +1576,10 @@ namespace ego_planner
+       lbfgs_params.g_epsilon = 0.01;
+ 
+       /* ---------- optimize ---------- */
+-      t1 = rclcpp::Clock().now();
++      t1 = ego_clock()->now();
+       // 执行优化
+       int result = lbfgs::lbfgs_optimize(variable_num_, q, &final_cost, BsplineOptimizer::costFunctionRebound, NULL, BsplineOptimizer::earlyExit, this, &lbfgs_params);
+-      t2 = rclcpp::Clock().now();
++      t2 = ego_clock()->now();
+       double time_ms = (t2 - t1).seconds() * 1000;
+       double total_time_ms = (t2 - t0).seconds() * 1000;
+ 
+diff --git a/src/planner/plan_manage/src/ego_planner_node.cpp b/src/planner/plan_manage/src/ego_planner_node.cpp
+index 89ec9a5..63818da 100755
+--- a/src/planner/plan_manage/src/ego_planner_node.cpp
++++ b/src/planner/plan_manage/src/ego_planner_node.cpp
+@@ -1,3 +1,4 @@
++#include <bspline_opt/ego_clock.h>
+ #include <rclcpp/rclcpp.hpp>
+ #include <visualization_msgs/msg/marker.hpp>
+ #include <iostream>
+@@ -10,6 +11,7 @@ int main(int argc, char **argv)
+ {
+   rclcpp::init(argc, argv);
+   auto node = std::make_shared<rclcpp::Node>("ego_planner_node");
++  ego_clock() = node->get_clock();
+ 
+   EGOReplanFSM rebo_replan;
+ 
+diff --git a/src/planner/plan_manage/src/ego_replan_fsm.cpp b/src/planner/plan_manage/src/ego_replan_fsm.cpp
+index 78d5eee..7b07463 100755
+--- a/src/planner/plan_manage/src/ego_replan_fsm.cpp
++++ b/src/planner/plan_manage/src/ego_replan_fsm.cpp
+@@ -1,4 +1,5 @@
+ 
++#include <bspline_opt/ego_clock.h>
+ #include <ego_planner/ego_replan_fsm.h>
+ 
+ namespace ego_planner
+@@ -273,16 +274,16 @@ namespace ego_planner
+       return;
+ 
+     // if (abs((ros::Time::now() - msg->start_time).toSec()) > 0.25)
+-    rclcpp::Clock clock(RCL_SYSTEM_TIME);  // 确保使用当前节点的时间源
++    rclcpp::Clock &clock = *ego_clock();
+     auto msg_time = rclcpp::Time(msg->start_time, clock.get_clock_type());
+     // RCLCPP_INFO(node_->get_logger(), "Clock type: %d", rclcpp::Clock().now().get_clock_type());
+     // RCLCPP_INFO(node_->get_logger(), "Start time clock type: %d", rclcpp::Time(msg->start_time).get_clock_type());
+     // RCLCPP_INFO(node_->get_logger(), "msg_time: %d", msg_time.get_clock_type());
+-    if (abs((rclcpp::Clock().now() - msg_time).seconds()) > 0.25)
++    if (abs((ego_clock()->now() - msg_time).seconds()) > 0.25)
+     {
+       // ROS_ERROR("Time difference is too large! Local - Remote Agent %d = %fs", msg->drone_id, (ros::Time::now() - msg->start_time).toSec());
+       RCLCPP_ERROR(node_->get_logger(), "Time difference is too large! Local - Remote Agent %d = %fs",
+-                   msg->drone_id, (rclcpp::Clock().now() - msg_time).seconds());
++                   msg->drone_id, (ego_clock()->now() - msg_time).seconds());
+       return;
+     }
+ 
+@@ -565,7 +566,7 @@ namespace ego_planner
+     {
+       /* determine if need to replan */
+       LocalTrajData *info = &planner_manager_->local_data_;
+-      rclcpp::Time time_now = rclcpp::Clock().now();
++      rclcpp::Time time_now = ego_clock()->now();
+       double t_cur = (time_now - info->start_time_).seconds();
+       t_cur = std::min(info->duration_, t_cur);
+ 
+@@ -626,7 +627,7 @@ namespace ego_planner
+     }
+     }
+ 
+-    data_disp_.header.stamp = rclcpp::Clock().now();
++    data_disp_.header.stamp = ego_clock()->now();
+     data_disp_pub_->publish(data_disp_);
+ 
+   force_return:;
+@@ -665,7 +666,7 @@ namespace ego_planner
+ 
+     LocalTrajData *info = &planner_manager_->local_data_;
+     // ros::Time time_now = ros::Time::now();
+-    auto time_now = rclcpp::Clock().now();
++    auto time_now = ego_clock()->now();
+     // double t_cur = (time_now - info->start_time_).toSec();
+     double t_cur = (time_now - info->start_time_).seconds();
+ 
+@@ -717,12 +718,12 @@ namespace ego_planner
+     /* ---------- check trajectory ---------- */
+     constexpr double time_step = 0.01;
+     // double t_cur = (ros::Time::now() - info->start_time_).toSec();
+-    double t_cur = (rclcpp::Clock().now() - info->start_time_).seconds();
++    double t_cur = (ego_clock()->now() - info->start_time_).seconds();
+ 
+     Eigen::Vector3d p_cur = info->position_traj_.evaluateDeBoorT(t_cur);
+     const double CLEARANCE = 1.0 * planner_manager_->getSwarmClearance();
+     // double t_cur_global = ros::Time::now().toSec();
+-    double t_cur_global = rclcpp::Clock().now().seconds();
++    double t_cur_global = ego_clock()->now().seconds();
+ 
+     double t_2_3 = info->duration_ * 2 / 3;
+     for (double t = t_cur; t < info->duration_; t += time_step)
+diff --git a/src/planner/plan_manage/src/planner_manager.cpp b/src/planner/plan_manage/src/planner_manager.cpp
+index 2e420d4..ccdac25 100755
+--- a/src/planner/plan_manage/src/planner_manager.cpp
++++ b/src/planner/plan_manage/src/planner_manager.cpp
+@@ -1,4 +1,5 @@
+ // #include <fstream>
++#include <bspline_opt/ego_clock.h>
+ #include <ego_planner/planner_manager.h>
+ #include <thread>
+ #include "visualization_msgs/msg/marker.hpp" // zx-todo
+@@ -61,7 +62,7 @@ namespace ego_planner
+ 
+     bspline_optimizer_->setLocalTargetPt(local_target_pt);
+ 
+-    rclcpp::Time t_start = rclcpp::Clock().now();
++    rclcpp::Time t_start = ego_clock()->now();
+     rclcpp::Duration t_init(0, 0), t_opt(0, 0), t_refine(0, 0);
+ 
+     /*** STEP 1: INIT
+@@ -141,7 +142,7 @@ namespace ego_planner
+       {
+ 
+         double t;
+-        double t_cur = (rclcpp::Clock().now() - local_data_.start_time_).seconds();
++        double t_cur = (ego_clock()->now() - local_data_.start_time_).seconds();
+ 
+         vector<double> pseudo_arc_length;
+         vector<Eigen::Vector3d> segment_point;
+@@ -223,7 +224,7 @@ namespace ego_planner
+     vector<std::pair<int, int>> segments;
+     segments = bspline_optimizer_->initControlPoints(ctrl_pts, true);
+     // 计算时间差并更新时间
+-    auto now = rclcpp::Clock().now();
++    auto now = ego_clock()->now();
+     t_init = now - t_start;
+     t_start = now;
+ 
+@@ -267,14 +268,14 @@ namespace ego_planner
+         }
+       }
+ 
+-      t_opt = rclcpp::Clock().now() - t_start;
++      t_opt = ego_clock()->now() - t_start;
+ 
+       visualization_->displayMultiInitPathList(vis_trajs, 0.2);
+     }
+     else
+     {
+       flag_step_1_success = bspline_optimizer_->BsplineOptimizeTrajRebound(ctrl_pts, ts);
+-      t_opt = rclcpp::Clock().now() - t_start;
++      t_opt = ego_clock()->now() - t_start;
+       // static int vis_id = 0;
+       visualization_->displayInitPathList(point_set, 0.2, 0);
+     }
+@@ -287,7 +288,7 @@ namespace ego_planner
+       return false;
+     }
+ 
+-    t_start = rclcpp::Clock().now();
++    t_start = ego_clock()->now();
+ 
+     UniformBspline pos = UniformBspline(ctrl_pts, 3, ts);
+     pos.setPhysicalLimits(pp_.max_vel_, pp_.max_acc_, pp_.feasibility_tolerance_);
+@@ -327,10 +328,10 @@ namespace ego_planner
+     }
+ 
+     // t_refine = ros::Time::now() - t_start;
+-    t_refine = rclcpp::Clock().now() - t_start;
++    t_refine = ego_clock()->now() - t_start;
+ 
+     // save planned results
+-    updateTrajInfo(pos, rclcpp::Clock().now());
++    updateTrajInfo(pos, ego_clock()->now());
+ 
+     static double sum_time = 0;
+     static int count_success = 0;
+@@ -355,7 +356,7 @@ namespace ego_planner
+       control_points.col(i) = stop_pos;
+     }
+ 
+-    updateTrajInfo(UniformBspline(control_points, 3, 1.0), rclcpp::Clock().now());
++    updateTrajInfo(UniformBspline(control_points, 3, 1.0), ego_clock()->now());
+ 
+     return true;
+   }
+@@ -453,7 +454,7 @@ namespace ego_planner
+     else
+       return false;
+ 
+-    auto time_now = rclcpp::Clock().now();
++    auto time_now = ego_clock()->now();
+ 
+     global_data_.setGlobalTraj(gl_traj, time_now);
+ 
+@@ -520,7 +521,7 @@ namespace ego_planner
+     else
+       return false;
+ 
+-    auto time_now = rclcpp::Clock().now();
++    auto time_now = ego_clock()->now();
+ 
+     global_data_.setGlobalTraj(gl_traj, time_now);
+ 
+diff --git a/src/planner/plan_manage/src/traj_server.cpp b/src/planner/plan_manage/src/traj_server.cpp
+index a32026d..5b945c5 100755
+--- a/src/planner/plan_manage/src/traj_server.cpp
++++ b/src/planner/plan_manage/src/traj_server.cpp
+@@ -1,3 +1,4 @@
++#include <bspline_opt/ego_clock.h>
+ #include "bspline_opt/uniform_bspline.h"
+ #include "nav_msgs/msg/odometry.hpp"
+ #include "traj_utils/msg/bspline.hpp"
+@@ -167,7 +168,7 @@ void cmdCallback()
+     return;
+ 
+   // 统一时间源
+-  rclcpp::Clock clock(RCL_ROS_TIME);  
++  rclcpp::Clock &clock = *ego_clock();
+   rclcpp::Time time_now = clock.now();
+   double t_cur = (time_now - start_time_).seconds();
+ 
+@@ -235,6 +236,7 @@ int main(int argc, char **argv)
+ {
+   rclcpp::init(argc, argv);
+   auto node = rclcpp::Node::make_shared("traj_server");
++  ego_clock() = node->get_clock();
+ 
+   auto bspline_sub = node->create_subscription<traj_utils::msg::Bspline>(
+       "planning/bspline",
