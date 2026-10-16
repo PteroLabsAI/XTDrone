@@ -18,11 +18,11 @@ from geo import enu_between
 from px4 import QOS, px4_topic
 
 KP = 1.0  # the ROS 1 follower's Kp
-# Twice the ROS 1 follower's Kp_avoid: at 2.0, two pairs crossing while 18 x500 built the cuboid at 7 m/s came 0.33 m
-# apart (x500 propellers touch at ~0.82 m); at 4.0 the closest pair was 0.82 m (PteroSim, 2026-10-03/04).
+# Twice the ROS 1 follower's Kp_avoid: the push must part two followers crossing at figure-change speed before their
+# propellers meet (x500 propellers touch at ~0.82 m between centres).
 KP_AVOID = 4.0
-# m/s, the slot pull's cap, on the move relative to the leader only. XTDrone's vel_max of 1 m/s took 8-15 s per figure
-# change; 2 m/s takes 4-8 s. The cap holds the slot pull alone, so the avoid push still wins near another vehicle.
+# m/s, the slot pull's cap, on the move relative to the leader only. XTDrone's vel_max of 1 m/s makes a figure change
+# slow; 2 m/s halves it. The cap holds the slot pull alone, so the avoid push still wins near another vehicle.
 CORRECTION_MAX = 2.0
 # The communication node streams setpoints at 30 Hz; PX4 sends positions at 50 Hz (dds_topics.yaml rate_limit).
 CONTROL_HZ = 30.0

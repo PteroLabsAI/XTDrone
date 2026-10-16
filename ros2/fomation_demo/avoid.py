@@ -7,9 +7,9 @@ import itertools
 
 import numpy
 
-# m; the ROS 1 node's avoid_radius was 1.5, which let followers crossing at 2 m/s close to 0.44 m before the push began
-# (18 x500 in PteroSim, 2026-10-03). Never wider than the closest two slots of the fleet's patterns, so a formed figure
-# feels no push: 2.5 m for 18 vehicles (slots >= 3 m apart), 2.0 m for 6 (the "T" has slots 2 m apart).
+# m; the ROS 1 node's avoid_radius of 1.5 starts the push too late for followers crossing at 2 m/s. Never wider than the
+# closest two slots of the fleet's patterns, so a formed figure feels no push: 2.5 m for 18 vehicles (slots >= 3 m apart),
+# 2.0 m for 6 (the "T" has slots 2 m apart).
 AVOID_RADIUS_MAX = 2.5
 AID_VEC1 = numpy.array([1.0, 0.0, 0.0])
 AID_VEC2 = numpy.array([0.0, 1.0, 0.0])

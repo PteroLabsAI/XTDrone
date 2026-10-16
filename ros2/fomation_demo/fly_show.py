@@ -19,12 +19,11 @@ CLIMB_TO_M = 12.0       # the sphere's lowest slot is 6 m under the leader (form
 CLIMB_TIMEOUT_S = 3.0 * CLIMB_TO_M / CLIMB_MS   # chosen, generous
 HOLD_S = 3.0            # chosen: the grid hangs still before it moves off
 CRUISE_MS = 7.0         # chosen: brisk forward flight; the whole show stays on the runway's ~530 m from its west end
-# A follower takes the leader's measured velocity, so it lags ~tau * dv; a step to 7 m/s left the ones ahead 4 m behind
-# and the leader flew through one (take swarm_show1: 0.27 m). Ramped, the 1 m/s correction keeps up.
+# A follower takes the leader's measured velocity, so it lags ~tau * dv; a step to cruise leaves the ones ahead metres
+# behind, in the leader's way. Ramped, the 1 m/s correction keeps up.
 RAMP_S = 7.0            # chosen: 1 m/s^2
-# Seconds per figure: settling at the followers' 2 m/s measured in take swarm_show5 (cuboid 8.6, sphere 6.6, diamond
-# 5.1, origin 8.2) plus HOLD_FORMED_S with the figure formed: v3 broke each figure up as soon as it formed and the
-# user found the changes over too quickly.
+# Seconds per figure: the time the followers take to settle into it at their 2 m/s, plus HOLD_FORMED_S with the
+# figure formed.
 HOLD_FORMED_S = 4.5             # chosen: time to show a formed figure from a second camera
 FIGURES = [(name, settle + HOLD_FORMED_S) for name, settle in
            (("cuboid", 8.6), ("sphere", 6.6), ("diamond", 5.1), ("origin", 8.2))]   # origin last: AUTO.LAND goes straight down
