@@ -1,7 +1,8 @@
 """EGO-Planner swarm of N PteroSim x500s line abreast through a forest of the map playing in PteroSim: spawns them with
 depth cameras on a line across the heading, gives each the point --length ahead of its spawn as its goal, starts the
-WSL side (../wsl/run_swarm.sh) and waits until every drone is at its goal, printing the real-time factor. The planners
-find their way around the trees from their own depth cameras.
+WSL side (../wsl/run_swarm.sh) and waits until every drone is at its goal, printing the real-time factor; it refuses a
+goal under a low crown and fails when a drone crashes. The planners find their way around the trees from their own
+depth cameras.
 
     python swarm_forest.py --start x,y --heading deg --length m --drones N --fly-height m
         --distro <WSL distro> --px4 <px4_root> --px4-ros-ws <dir> --ego-ws <dir>
@@ -31,6 +32,10 @@ MAX_RANGE_M = 10.0  # chosen: past the launch's 8 m ray length
 DEPTH_W, DEPTH_H = 160, 120  # the pixels ego-planner kept of 320x240 at upstream's skip_pixel 2, sent instead of skipped
 DEPTH_HZ = 30  # every editor frame at 30 fps; 20 Hz left a quarter of the planner's 20 Hz fusion ticks without a new frame
 GOAL_REACHED_M = 3.0  # chosen
+GOAL_CLEAR_M = 1.0  # chosen: past the launch's 0.71 m obstacle inflation, which would put the goal inside an obstacle
+# Between two goals of the README's line at --length 90: drone 1 parked 4 m short of one under a crown topping out 3.3 m
+# over it; drone 4 reached one under a pine topping out 8.9 m over it, its crown above the flight.
+LOW_CROWN_M = 7.0
 MIN_MEAN_SPEED_MS = 1.0  # chosen: a fifth of the launch's 5 m/s limit; slower than this on average, the swarm is stuck
 TIME_SCALE = 1.0  # chosen: real time; PX4 and the planners follow the simulation's clock at whatever rate it reaches
 PRINT_S = 10.0  # chosen
@@ -77,12 +82,16 @@ def main():
             d.set_sensor_param(depth, update_hz=DEPTH_HZ, image_width=DEPTH_W, image_height=DEPTH_H, raw_stream=True,
                                raw_stream_port=DEPTH_PORT, max_range_m=MAX_RANGE_M, noise=False)
             drones.append(d)
-        # A spawn lands on whatever surface is under it, so each drone's own height is its ground.
-        status = {s.instance_id: s for s in sim.aircraft_status()}
-        missing = [d.instance_id for d in drones if d.instance_id not in status]
-        if missing:
-            sys.exit(f"PteroSim reports no position for drones {missing} after spawning them")
-        ground = [status[d.instance_id].z / CM_PER_M for d in drones]
+        # A pose stands the drone on the highest surface under the point (SpawnManager.cpp GroundTraceStartAboveM): at its
+        # goal, a crown or rising ground over the goal; back at its spawn, its ground.
+        stand_m = lambda d, x, y: d.set_pose(x=x * CM_PER_M, y=y * CM_PER_M, z=0.0, yaw=a.heading)[2] / CM_PER_M  # noqa: E731
+        top = [stand_m(d, x, y) for d, (x, y) in zip(drones, goals_ue)]
+        ground = [stand_m(d, x, y) for d, (x, y) in zip(drones, spawns_ue)]
+        covered = [f"{i} at UE ({x:.1f}, {y:.1f}) m: {t - g - a.fly_height:+.1f} m" for i, ((x, y), t, g)
+                   in enumerate(zip(goals_ue, top, ground)) if -GOAL_CLEAR_M < t - g - a.fly_height < LOW_CROWN_M]
+        if covered:
+            sys.exit(f"a low crown or the ground tops out between {GOAL_CLEAR_M:g} m under and {LOW_CROWN_M:g} m over "
+                     "these goals: " + "; ".join(covered))
         floor = min(ground)
         spawns_enu = [(*enu(x, y), g - floor) for (x, y), g in zip(spawns_ue, ground)]
         goals_enu = [(*enu(x, y), g - floor + a.fly_height) for (x, y), g in zip(goals_ue, ground)]
@@ -111,6 +120,9 @@ def main():
             off = [math.hypot(now[d.instance_id].x / CM_PER_M - gx, now[d.instance_id].y / CM_PER_M - gy)
                    for d, (gx, gy) in zip(drones, goals_ue)]
             sim_t = sim.clock().simulation_time
+            crashed = [f"{d.instance_id} {now[d.instance_id].crashed.name}" for d in drones if now[d.instance_id].crashed]
+            if crashed:
+                sys.exit(f"crashed after {sim_t - sim_t0:.0f} s of simulation: " + ", ".join(crashed))
             if all(o < GOAL_REACHED_M for o in off):
                 print(f"all {a.drones} at their goals after {sim_t - sim_t0:.0f} s of simulation", flush=True)
                 return
