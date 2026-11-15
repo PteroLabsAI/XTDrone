@@ -6,7 +6,7 @@ This package is the ROS 2 Humble bridge between the three; `scripts/` holds what
 
 ```
 PteroSim depth camera --PTF1/TCP--> depth_bridge --Image 16UC1--> ego_planner_node (grid map)
-PteroSim control API --GetSimulationClock--> pterosim_clock --/clock--> every node but px4_bridge (use_sim_time)
+PteroSim control API --GetSimulationClock--> pterosim_clock --/clock--> every node but the bridges (use_sim_time)
 PX4 SITL --uXRCE-DDS--> px4_bridge --Odometry, camera PoseStamped--> ego_planner_node --B-spline--> traj_server
 traj_server --PositionCommand--> px4_bridge --OffboardControlMode, TrajectorySetpoint, VehicleCommand--> PX4
 start_swarm --/traj_start_trigger--> every ego_planner_node, once every drone is up
@@ -107,8 +107,8 @@ same reason.
 | `optimization/lambda_feasibility` | 1.0 (upstream 0.1) | weights the plans' feasibility cost up, toward the 4 m/s² limit; chosen |
 | `grid_map/odom_depth_timeout` | 3 s (upstream 1 s) | ego-planner latches EMERGENCY_STOP for good after a longer gap (`grid_map.cpp:716-724`); a swarm's start, every PX4 and planner coming up at once, can hold odometry back for more than 1 s |
 | planner start | after px4_bridge's takeoff | a planner up before PX4's odometry flags it lost for good (`grid_map.cpp:716-724`, `:199`) |
-| depth camera | 160x120 at 20 Hz, `grid_map/skip_pixel` 1 | ego-planner fuses the latest frame on a 20 Hz timer (`grid_map.cpp:175`), and upstream's `skip_pixel` 2 keeps 160x120 of a 320x240 image, so the camera sends only what the planner uses. PteroSim steps the world once every PX4 has answered, and the PX4s answer later the busier the host is: every unused frame slows the swarm |
-| editor frame rate | 30 fps | rendering the main view at 60 fps takes about two more cores; the depth cameras render with it, so it stays at or above their 20 Hz. Run `t.MaxFPS 30` in the editor's console, or start the editor with `-ExecCmds="t.MaxFPS 30"`: at startup the editor's frame rate limit overrides a `t.MaxFPS` set in an ini |
+| depth camera | 160x120 at 30 Hz, `grid_map/skip_pixel` 1, `depth_filter_margin` 1 | upstream's `skip_pixel` 2 and margin 2 use the same rays of a 320x240 image, so the camera sends only what the planner uses: PteroSim steps the world once every PX4 has answered, and the PX4s answer later the busier the host is. ego-planner fuses the latest frame on a 20 Hz wall-clock timer (`grid_map.cpp:175`); with the editor at 30 fps a 20 Hz camera renders 33 and 67 ms apart and left 23 % of the ticks without a new frame in an 8-drone flight, 30 Hz renders on every frame and left 8 % |
+| editor frame rate | 30 fps | rendering the main view at 60 fps takes about two more cores; the depth cameras render with it, so it stays at or above their 30 Hz. Run `t.MaxFPS 30` in the editor's console, or start the editor with `-ExecCmds="t.MaxFPS 30"`: at startup the editor's frame rate limit overrides a `t.MaxFPS` set in an ini |
 | GPS noise | off | a swarm flies on RTK; independent 1.7 m errors put neighbours 5 m apart into each other |
 | `SENS_BAR_AUTOCAL` | 0 | at spin-up PX4 offsets the barometer onto the GPS altitude, which copies the GPS error into the height estimate |
 | `EKF2_HGT_REF` | 0 (baro) | the GPS height reference carries the GPS altitude noise into a hover a few metres above the ground |
@@ -130,7 +130,9 @@ with FDM time, and the depth camera stamps each frame with the FDM time of the s
 - Depth images: the frame's `sim_us`.
 - Odometry and camera pose: `VehicleOdometry.timestamp_sample`.
 - PX4-bound messages: the latest `VehicleOdometry.timestamp`, so OFFBOARD lapses (COM_OF_LOSS_T) when px4_bridge
-  stops hearing PX4. It runs on odometry callbacks, never on a timer, and without `use_sim_time`.
+  stops hearing PX4. It runs on odometry callbacks, never on a timer.
+
+The bridges run without `use_sim_time`: neither reads a ROS clock.
 
 Upstream ego-planner reads plan times from `rclcpp::Clock()`, the system clock, at 23 call sites in the FSM, the
 planner manager and the optimizer, from an explicit `RCL_SYSTEM_TIME` clock in the FSM's swarm check, and from an
@@ -210,7 +212,8 @@ once, and fails if a planner does not acknowledge it within 5 s.
 | `takeoff_height` | `2.0` | m |
 | `ceiling` | `4.0` | ego-planner's virtual ceiling, m (upstream 2.9) |
 | `map_size` | `100,40,5` | each planner's map, m, centred on the world origin |
-| `depth_width`, `depth_height`, `depth_fov_deg` | `640`, `480`, `90.0` | the sensor's `image_width`, `image_height`, `field_of_view` |
+| `depth_width`, `depth_height` | required | the sensor's `image_width`, `image_height` |
+| `depth_fov_deg` | `90.0` | the sensor's `field_of_view` |
 | `camera_offset_frd` | `0.15,0.0,0.0` | the depth camera's mount, FRD m |
 
 The world origin is the middle of the map: ego-planner's map spans `-x/2..x/2`, `-y/2..y/2` and

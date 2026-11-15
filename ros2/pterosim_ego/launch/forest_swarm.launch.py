@@ -1,7 +1,7 @@
 """N PteroSim x500s through a forest: PX4 SITL over uXRCE-DDS, PteroSim depth cameras, ego-planner-swarm.
 
     ros2 launch pterosim_ego forest_swarm.launch.py raw_stream_port:=5710 control:=127.0.0.1:10010 \
-        spawns:="-45,-3,0;-45,3,0" goals:="45,3,2;45,-3,2"
+        spawns:="-45,-3,0;-45,3,0" goals:="45,3,2;45,-3,2" depth_width:=160 depth_height:=120
 
 scripts/windows/swarm_forest.py computes these for a line of drones and starts it through scripts/wsl/run_swarm.sh. Drone i is
 PteroSim instance i, PX4 instance i (namespace <px4_ns_prefix><i>) and ego-planner drone i, ids 0..N-1: each planner
@@ -130,15 +130,15 @@ def _drones(context):
         camera_pose = drone_topic(i, "pcl_render_node/camera_pose")
         bspline = drone_topic(i, "planning/bspline")
         position_cmd = drone_topic(i, "planning/pos_cmd")
+        # No use_sim_time: the bridges stamp from PteroSim's and PX4's own times, and /clock would only cost them reads.
         bridges = [
             _node(package="pterosim_ego", executable="depth_bridge", name=f"drone_{i}_depth_bridge",
-                 parameters=[sim_time, {"drone_id": i, "host": arg("raw_stream_host"),
+                 parameters=[{"drone_id": i, "host": arg("raw_stream_host"),
                                         "raw_stream_port": int(arg("raw_stream_port")),
                                         "fx": fx, "fy": fy, "cx": cx, "cy": cy,
                                         "camera_offset_frd": camera_offset_frd}],
                  remappings=[("depth", depth)]),
             _node(package="pterosim_ego", executable="px4_bridge", name=f"drone_{i}_px4_bridge",
-                 # No use_sim_time: it runs on PX4's clock, and a /clock subscription costs it a callback per frame.
                  parameters=[{"drone_id": i, "px4_ns": f"{arg('px4_ns_prefix')}{i}",
                                         "spawn_enu": list(spawn), "takeoff_height": takeoff_height,
                                         "camera_offset_frd": camera_offset_frd}],
@@ -197,7 +197,7 @@ def _drones(context):
                      "grid_map/depth_filter_tolerance": 0.15,
                      "grid_map/depth_filter_maxdist": RAY_LENGTH_M,  # farther depth becomes a free ray to the ray length (grid_map.cpp:335)
                      "grid_map/depth_filter_mindist": 0.2,
-                     "grid_map/depth_filter_margin": 2,
+                     "grid_map/depth_filter_margin": 1,  # upstream 2 px of 320; 1 px of 160 trims the same angle
                      "grid_map/k_depth_scaling_factor": 1000.0,
                      "grid_map/skip_pixel": 1,  # upstream 2: swarm_forest.py sends only the pixels that 2 would keep
                      "grid_map/p_hit": 0.65,
@@ -263,8 +263,8 @@ def generate_launch_description():
         DeclareLaunchArgument("map_size", default_value="100,40,5",
                               description="x,y,z m of each planner's map, centred on the world origin; ~15 B a "
                                           "0.1 m voxel, so 100x40x5 is 300 MB per drone"),
-        DeclareLaunchArgument("depth_width", default_value="640", description="the sensor's image_width"),
-        DeclareLaunchArgument("depth_height", default_value="480", description="the sensor's image_height"),
+        DeclareLaunchArgument("depth_width", description="the sensor's image_width"),
+        DeclareLaunchArgument("depth_height", description="the sensor's image_height"),
         DeclareLaunchArgument("depth_fov_deg", default_value="90.0", description="the sensor's field_of_view"),
         DeclareLaunchArgument("camera_offset_frd", default_value="0.15,0.0,0.0",
                               description="the depth camera's mount in the body, x,y,z m FRD, level and forward"),
