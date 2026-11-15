@@ -4,8 +4,7 @@
         spawns:="-45,-3,0;-45,3,0" goals:="45,3,2;45,-3,2" depth_width:=160 depth_height:=120
 
 scripts/windows/swarm_forest.py computes these for a line of drones and starts it through scripts/wsl/run_swarm.sh. Drone i is
-PteroSim instance i, PX4 instance i (namespace <px4_ns_prefix><i>) and ego-planner drone i, ids 0..N-1: each planner
-starts after the one before it (ego_replan_fsm.cpp:77). spawns and goals are x,y,z metres in the swarm's ENU world,
+PteroSim instance i, PX4 instance i (namespace <px4_ns_prefix><i>) and ego-planner drone i, ids 0..N-1. spawns and goals are x,y,z metres in the swarm's ENU world,
 whose origin is the middle of the map (grid_map.cpp:92). The clock or an agent exiting stops the launch; a drone's own
 nodes ending (its crash closes its camera's stream) leave the rest flying.
 """

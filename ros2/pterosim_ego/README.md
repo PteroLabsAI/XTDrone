@@ -13,8 +13,7 @@ start_swarm --/traj_start_trigger--> every ego_planner_node, once every drone is
 ```
 
 Drone `i` is PteroSim instance `i`, PX4 instance `i` (uXRCE namespace `x500_<i>`, MAV_SYS_ID `i+1`, HIL port
-`4560+i`) and ego-planner drone `i`. Ids must run 0..N-1: planner `i` starts only after planner `i-1` has published
-its trajectory (`ego_replan_fsm.cpp:77`).
+`4560+i`) and ego-planner drone `i`. Ids must run 0..N-1.
 
 The parameters below are set for a 90 m pine corridor of the Mediterranean Coast map (Fab).
 
@@ -36,7 +35,7 @@ WSL2 (Ubuntu 22.04, mirrored networking, so WSL reaches PteroSim on `127.0.0.1`)
   message versions must match the firmware.
 - PteroSim's Python SDK, for `pterosim_clock`: `pip install --user` the same release folder, through `/mnt/c/...`.
 
-`ros2/Dockerfile` builds this package and the patched planner (it applies the patch below and fails if it does not
+`ros2/Dockerfile` builds this package and the patched planner (it applies the patches below and fails if one does not
 apply), but the image has no PX4, `px4_msgs`, agent or SDK: flying needs the WSL setup described here.
 
 ## Build (WSL)
@@ -204,10 +203,10 @@ drones that are up 30 s (sim time) after the first takeoff; publishes `/traj_sta
 once, and fails if a planner does not acknowledge it within 5 s.
 
 A planner that the trigger reaches before its first odometry is still in INIT, and upstream then sends it to
-SEQUENTIAL_START, where it waits for the one `swarm_trajs` its predecessor published when it planned
-(`ego_replan_fsm.cpp:208`, `:505`, `:881`); that message has gone, so the drone never leaves. The last planner to come
-up meets this when its odometry is late. `patches/ego-planner-swarm-late-start.patch` starts it from INIT as the others start
-from WAIT_TARGET.
+SEQUENTIAL_START, where it waits for its predecessor's `swarm_trajs` (`ego_replan_fsm.cpp:208`, `:505`). Only a planner
+leaving SEQUENTIAL_START publishes one (`:514`, `:864`); the others, triggered in WAIT_TARGET, go straight to
+GEN_NEW_TRAJ and never do, so the drone never leaves. The last planner to come up meets this when its odometry is late.
+`patches/ego-planner-swarm-late-start.patch` starts it from INIT with odometry as the others start from WAIT_TARGET.
 
 ## Launch arguments
 
@@ -267,6 +266,9 @@ optical frame (x image right, y image down, z forward).
 - PX4 lags the plan in fast turns; `MAX_VEL_MS` is the knob.
 - Each goal sits `--fly-height` above its own spawn's ground. A goal the script refuses, under a low crown or in ground
   that rises toward the goals, needs another line, another length or a higher flight, under the launch's ceiling.
+  Ground that rises more than `--fly-height` plus 7 m passes the check as a tall pine would and puts the goal
+  underground; so does a goal over a gap in the map's collision, where a pose finds no surface and stays where it was
+  asked.
 - 640x480 at most: ego-planner's projection buffer is sized for it and never checks (`grid_map.cpp:128`).
 - The depth camera must be mounted level and forward; only its offset is configurable.
 - One route per drone. `/traj_start_trigger` reaches every planner; after its goal a planner waits for the next one.
