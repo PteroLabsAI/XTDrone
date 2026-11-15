@@ -266,12 +266,15 @@ optical frame (x image right, y image down, z forward).
 - PX4 lags the plan in fast turns; `MAX_VEL_MS` is the knob.
 - Each goal sits `--fly-height` above its own spawn's ground. A goal the script refuses, under a low crown or in ground
   that rises toward the goals, needs another line, another length or a higher flight, under the launch's ceiling.
-  Ground that rises more than `--fly-height` plus 7 m passes the check as a tall pine would and puts the goal
+  The check sees only the highest surface over a goal: ground rising more than `--fly-height` under a crown that tops
+  out 7 m over the goal, or bare ground rising more than `--fly-height` plus 7 m, passes and puts the goal
   underground; so does a goal over a gap in the map's collision, where a pose finds no surface and stays where it was
   asked.
 - 640x480 at most: ego-planner's projection buffer is sized for it and never checks (`grid_map.cpp:128`).
 - The depth camera must be mounted level and forward; only its offset is configurable.
 - One route per drone. `/traj_start_trigger` reaches every planner; after its goal a planner waits for the next one.
+  A later trigger starts them in order, drone `i` once drone `i-1` has planned (`ego_replan_fsm.cpp:505`), so send it
+  when every drone is at its goal: one still flying drops it, and every drone after it waits.
 - A crash closes that drone's depth stream: its bridge exits and the others fly on.
 - Fast DDS: the launch sets `FASTRTPS_DEFAULT_PROFILES_FILE` to `config/fastdds_wsl.xml` (UDP only, messages under
   1400 bytes), since mirrored WSL loses larger loopback datagrams. Any other ROS process on the swarm (rviz2,
