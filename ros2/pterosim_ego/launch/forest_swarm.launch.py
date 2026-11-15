@@ -138,7 +138,8 @@ def _drones(context):
                                         "camera_offset_frd": camera_offset_frd}],
                  remappings=[("depth", depth)]),
             _node(package="pterosim_ego", executable="px4_bridge", name=f"drone_{i}_px4_bridge",
-                 parameters=[sim_time, {"drone_id": i, "px4_ns": f"{arg('px4_ns_prefix')}{i}",
+                 # No use_sim_time: it runs on PX4's clock, and a /clock subscription costs it a callback per frame.
+                 parameters=[{"drone_id": i, "px4_ns": f"{arg('px4_ns_prefix')}{i}",
                                         "spawn_enu": list(spawn), "takeoff_height": takeoff_height,
                                         "camera_offset_frd": camera_offset_frd}],
                  remappings=[("odom", odom), ("camera_pose", camera_pose), ("position_cmd", position_cmd),
@@ -198,7 +199,7 @@ def _drones(context):
                      "grid_map/depth_filter_mindist": 0.2,
                      "grid_map/depth_filter_margin": 2,
                      "grid_map/k_depth_scaling_factor": 1000.0,
-                     "grid_map/skip_pixel": 2,
+                     "grid_map/skip_pixel": 1,  # upstream 2: swarm_forest.py sends only the pixels that 2 would keep
                      "grid_map/p_hit": 0.65,
                      "grid_map/p_miss": 0.35,
                      "grid_map/p_min": 0.12,
