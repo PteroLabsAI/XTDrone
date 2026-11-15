@@ -41,12 +41,13 @@ apply), but the image has no PX4, `px4_msgs`, agent or SDK: flying needs the WSL
 
 ## Build (WSL)
 
-ego-planner-swarm gets one patch first, `patches/ego-planner-swarm-sim-clock.patch` (see Time):
+ego-planner-swarm gets two patches first, `patches/ego-planner-swarm-sim-clock.patch` (see Time) and
+`patches/ego-planner-swarm-late-start.patch` (see start_swarm):
 
 ```bash
 git clone https://github.com/PteroLabsAI/XTDrone.git ~/XTDrone
 git -C ~/XTDrone submodule update --init ros2/ego-planner-swarm
-git -C ~/XTDrone/ros2/ego-planner-swarm apply ../pterosim_ego/patches/ego-planner-swarm-sim-clock.patch
+(cd ~/XTDrone/ros2/ego-planner-swarm && git apply ../pterosim_ego/patches/*.patch)
 
 mkdir -p ~/ego_ws/src && ln -s ~/XTDrone/ros2/ego-planner-swarm ~/XTDrone/ros2/pterosim_ego ~/ego_ws/src/
 cd ~/ego_ws
@@ -198,6 +199,12 @@ brake-and-park and yaw limit above; if none has come for 0.5 s (PX4 time) it hol
 Parameter `drones` (int). Waits for every `/drone_<i>_takeoff_done` and for every planner to subscribe, or sends for the
 drones that are up 30 s (sim time) after the first takeoff; publishes `/traj_start_trigger` (geometry_msgs/PoseStamped)
 once, and fails if a planner does not acknowledge it within 5 s.
+
+A planner that the trigger reaches before its first odometry is still in INIT, and upstream then sends it to
+SEQUENTIAL_START, where it waits for the one `swarm_trajs` its predecessor published when it planned
+(`ego_replan_fsm.cpp:208`, `:505`, `:881`); that message has gone, so the drone never leaves. The last planner to come
+up meets this when its odometry is late. `patches/ego-planner-swarm-late-start.patch` starts it from INIT as the others start
+from WAIT_TARGET.
 
 ## Launch arguments
 
