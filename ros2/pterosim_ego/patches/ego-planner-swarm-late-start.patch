@@ -1,0 +1,14 @@
+diff --git a/src/planner/plan_manage/src/ego_replan_fsm.cpp b/src/planner/plan_manage/src/ego_replan_fsm.cpp
+index 78d5eee..fc2dba7 100755
+--- a/src/planner/plan_manage/src/ego_replan_fsm.cpp
++++ b/src/planner/plan_manage/src/ego_replan_fsm.cpp
+@@ -205,7 +205,8 @@ namespace ego_planner
+       have_new_target_ = true;
+ 
+       /*** FSM状态转换 ***/
+-      if (exec_state_ == WAIT_TARGET)
++      // Triggered before its first odometry, SEQUENTIAL_START would wait for a swarm_trajs that nobody sends.
++      if (exec_state_ == WAIT_TARGET || (exec_state_ == INIT && have_odom_))
+         changeFSMExecState(GEN_NEW_TRAJ, "TRIG");
+       else
+       {

@@ -13,8 +13,7 @@ start_swarm --/traj_start_trigger--> every ego_planner_node, once every drone is
 ```
 
 Drone `i` is PteroSim instance `i`, PX4 instance `i` (uXRCE namespace `x500_<i>`, MAV_SYS_ID `i+1`, HIL port
-`4560+i`) and ego-planner drone `i`. Ids must run 0..N-1: planner `i` starts only after planner `i-1` has published
-its trajectory (`ego_replan_fsm.cpp:77`).
+`4560+i`) and ego-planner drone `i`. Ids must run 0..N-1.
 
 The parameters below are set for a 90 m pine corridor of the Mediterranean Coast map (Fab).
 
@@ -36,17 +35,18 @@ WSL2 (Ubuntu 22.04, mirrored networking, so WSL reaches PteroSim on `127.0.0.1`)
   message versions must match the firmware.
 - PteroSim's Python SDK, for `pterosim_clock`: `pip install --user` the same release folder, through `/mnt/c/...`.
 
-`ros2/Dockerfile` builds this package and the patched planner (it applies the patch below and fails if it does not
+`ros2/Dockerfile` builds this package and the patched planner (it applies the patches below and fails if one does not
 apply), but the image has no PX4, `px4_msgs`, agent or SDK: flying needs the WSL setup described here.
 
 ## Build (WSL)
 
-ego-planner-swarm gets one patch first, `patches/ego-planner-swarm-sim-clock.patch` (see Time):
+ego-planner-swarm gets two patches first, `patches/ego-planner-swarm-sim-clock.patch` (see Time) and
+`patches/ego-planner-swarm-late-start.patch` (see start_swarm):
 
 ```bash
 git clone https://github.com/PteroLabsAI/XTDrone.git ~/XTDrone
 git -C ~/XTDrone submodule update --init ros2/ego-planner-swarm
-git -C ~/XTDrone/ros2/ego-planner-swarm apply ../pterosim_ego/patches/ego-planner-swarm-sim-clock.patch
+(cd ~/XTDrone/ros2/ego-planner-swarm && git apply ../pterosim_ego/patches/*.patch)
 
 mkdir -p ~/ego_ws/src && ln -s ~/XTDrone/ros2/ego-planner-swarm ~/XTDrone/ros2/pterosim_ego ~/ego_ws/src/
 cd ~/ego_ws
@@ -77,19 +77,22 @@ itself through `wsl.exe`.
 A flight, with the map playing:
 
 ```powershell
-python swarm_forest.py --start 466,334 --heading 150 --length 90 --drones 8 --fly-height 2.5 `
+python swarm_forest.py --start 466,334 --heading 150 --length 81 --drones 8 --fly-height 2.5 `
     --distro Ubuntu-22.04 --px4 /home/<you>/PX4-Autopilot --px4-ros-ws /home/<you>/px4_ros_ws --ego-ws /home/<you>/ego_ws
 ```
 
 `--start` is the middle of the starting line and `--heading` the direction of flight, both in UE (metres, yaw); the
-values above start the 90 m pine corridor of the Mediterranean Coast map. The script removes every aircraft in the
+values above fly 81 m of the 90 m pine corridor of the Mediterranean Coast map. The script removes every aircraft in the
 scene and spawns N x500s 5 m apart across the heading, each with a 160x120 depth camera and GPS noise off. A spawn
-lands on the surface under it, so each drone's reported height is its ground. Its goal is the point `--length` ahead
-of its spawn, `--fly-height` above that ground, which is also its takeoff height; the planners find their way around
-the trees from their own depth cameras. The script starts the simulation at time scale 1, then `run_swarm.sh`, which
-returns once the planners are triggered; then it prints the real-time factor and each drone's distance to its goal
-every 10 s until all are within 3 m, and fails if the swarm averages under 1 m/s of simulation time. The swarm keeps
-flying afterwards: `scripts/wsl/stop.sh` ends it. Logs are in WSL `~/ego_forest_run/latest/` (`launch.sh` holds the
+lands on the highest surface under its point, so each drone's reported height is its ground. Its goal is the point
+`--length` ahead of its spawn, `--fly-height` above that ground, which is also its takeoff height; the planners find
+their way around the trees from their own depth cameras. The script stands each drone at its goal first and refuses a
+goal where a low crown or the ground tops out between 1 m under it and 7 m over it: the planner would find the goal
+inside an obstacle and stop short of it, as at 90 m, where drone 1's goal lies under a crown 3.3 m over it. A pine
+topping out higher has its crown above the flight. The script starts the simulation at time scale 1, then
+`run_swarm.sh`, which returns once the planners are triggered; then it prints the real-time factor and each drone's
+distance to its goal every 10 s until all are within 3 m, fails as soon as one crashes, and fails if the swarm averages
+under 1 m/s of simulation time. The swarm keeps flying afterwards: `scripts/wsl/stop.sh` ends it. Logs are in WSL `~/ego_forest_run/latest/` (`launch.sh` holds the
 exact launch command).
 
 ## Parameters, and why
@@ -199,6 +202,12 @@ Parameter `drones` (int). Waits for every `/drone_<i>_takeoff_done` and for ever
 drones that are up 30 s (sim time) after the first takeoff; publishes `/traj_start_trigger` (geometry_msgs/PoseStamped)
 once, and fails if a planner does not acknowledge it within 5 s.
 
+A planner that the trigger reaches before its first odometry is still in INIT, and upstream then sends it to
+SEQUENTIAL_START, where it waits for its predecessor's `swarm_trajs` (`ego_replan_fsm.cpp:208`, `:505`). Only a planner
+leaving SEQUENTIAL_START publishes one (`:514`, `:864`); the others, triggered in WAIT_TARGET, go straight to
+GEN_NEW_TRAJ and never do, so the drone never leaves. The last planner to come up meets this when its odometry is late.
+`patches/ego-planner-swarm-late-start.patch` starts it from INIT with odometry as the others start from WAIT_TARGET.
+
 ## Launch arguments
 
 | Argument | Default | |
@@ -255,11 +264,17 @@ optical frame (x image right, y image down, z forward).
   exchange, and past 3 s stops on a false odometry timeout. Later PteroSim versions step the whole world only after
   every aircraft's autopilot has answered.
 - PX4 lags the plan in fast turns; `MAX_VEL_MS` is the knob.
-- Each goal sits `--fly-height` above its own spawn's ground. Ground that rises more than that toward the goals puts
-  them underground: start on level ground or fly higher, under the launch's ceiling.
+- Each goal sits `--fly-height` above its own spawn's ground. A goal the script refuses, under a low crown or in ground
+  that rises toward the goals, needs another line, another length or a higher flight, under the launch's ceiling.
+  The check sees only the highest surface over a goal: ground rising more than `--fly-height` under a crown that tops
+  out 7 m over the goal, or bare ground rising more than `--fly-height` plus 7 m, passes and puts the goal
+  underground; so does a goal over a gap in the map's collision, where a pose finds no surface and stays where it was
+  asked.
 - 640x480 at most: ego-planner's projection buffer is sized for it and never checks (`grid_map.cpp:128`).
 - The depth camera must be mounted level and forward; only its offset is configurable.
 - One route per drone. `/traj_start_trigger` reaches every planner; after its goal a planner waits for the next one.
+  A later trigger starts them in order, drone `i` once drone `i-1` has planned (`ego_replan_fsm.cpp:505`), so send it
+  when every drone is at its goal: one still flying drops it, and every drone after it waits.
 - A crash closes that drone's depth stream: its bridge exits and the others fly on.
 - Fast DDS: the launch sets `FASTRTPS_DEFAULT_PROFILES_FILE` to `config/fastdds_wsl.xml` (UDP only, messages under
   1400 bytes), since mirrored WSL loses larger loopback datagrams. Any other ROS process on the swarm (rviz2,

@@ -14,8 +14,8 @@ RUN apt-get update \
 
 WORKDIR /ws
 COPY . src/
-# EGO-Planner on its node's clock (pterosim_ego README); whitespace-blind, as a Windows checkout turns its LF files CRLF.
-RUN git -C src apply --ignore-whitespace --directory=ego-planner-swarm pterosim_ego/patches/ego-planner-swarm-sim-clock.patch
+# EGO-Planner's patches (pterosim_ego README); whitespace-blind, as a Windows checkout turns its LF files CRLF.
+RUN cd src && git apply --ignore-whitespace --directory=ego-planner-swarm pterosim_ego/patches/*.patch
 # Every other dependency comes from the packages' own package.xml. Skipped: the CMake names apt.txt covers,
 # dynamic_reconfigure and tf, ROS 1 packages that local_sensing and odom_visualization still list, and px4_msgs, which
 # pterosim_ego needs built from the PX4 tree that flies.
